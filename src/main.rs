@@ -1,12 +1,12 @@
 mod json_parser;
 
 use json_parser::JsonParser;
-use std::io;
+use std::io::{Read, stdin};
 
 fn main() {
     let mut input_holder: String = String::new();
 
-    match io::stdin().read_line(&mut input_holder) {
+    match stdin().read_to_string(&mut input_holder) {
         Ok(_) => {
             let parser: Result<JsonParser, &'static str> = JsonParser::new(input_holder);
 

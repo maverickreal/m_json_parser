@@ -6,7 +6,8 @@ pub struct JsonParser {
 }
 
 impl JsonParser {
-    pub fn new(_text: String) -> Result<Self, &'static str> {
+    pub fn new(mut _text: String) -> Result<Self, &'static str> {
+        _text = String::from(_text.trim());
         let parsed_result: HashMap<String, String> = Self::parse(&_text)?;
         let instance: JsonParser = JsonParser {
             text: _text,
@@ -25,8 +26,7 @@ impl JsonParser {
     }
 
     fn parse(_text: &String) -> Result<HashMap<String, String>, &'static str> {
-        let mut chars_array: Vec<char> = _text.chars().collect::<Vec<char>>();
-        chars_array.pop();
+        let chars_array: Vec<char> = _text.chars().collect::<Vec<char>>();
         const NOT_VALID_JSON_FORMAT: &str = "The provided data is not in a valid JSON format!";
         let mut map: HashMap<String, String> = HashMap::new();
         let mut stack: Vec<String> = Vec::new();
