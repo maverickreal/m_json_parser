@@ -51,15 +51,17 @@ impl JsonParser {
                 return Err(NOT_VALID_JSON_FORMAT);
             }
 
-            let last_element: &mut String = stack.last_mut().unwrap();
+            let last_element: String = stack.last().unwrap().clone();
+
+            let last_ele_ends_text: bool = last_element
+                .chars()
+                .last()
+                .map_or(false,
+                    |c| c.is_alphanumeric() || c.is_whitespace());
 
             if ch == '"' {
-                if last_element.chars()
-                               .collect::<Vec<char>>()
-                               .last()
-                               .unwrap()
-                               .is_alphanumeric() {
-                    last_element.push(ch);
+                if last_ele_ends_text {
+                    stack.last_mut().unwrap().push(ch);
 
                     if stack.len() == 4 {
                         map.insert(stack[1].to_string(), stack[3].to_string());
@@ -80,17 +82,32 @@ impl JsonParser {
             }
 
             if ch.is_alphanumeric() {
-                last_element.push(ch);
+                stack.last_mut().unwrap().push(ch);
+                continue;
+            }
+
+            if ch.is_whitespace() {
+                if last_element == "\"" || last_ele_ends_text {
+                    stack.last_mut().unwrap().push(ch);
+                }
                 continue;
             }
 
             if ch == ':' {
                 stack.push(String::from(ch));
-            } else if ch != ','
-                && (ch != '}' || (ind != chars_array.len() - 1) || (stack.len() != 1))
-            {
+                continue;
+            }
+            
+            if ch == ',' {
+                continue;
+            }
+
+            if ch != '}' || (ind != chars_array.len() - 1) || stack.len() != 1 {
                 // e
-                println!("Stack isn't empty! (2); char: {}; stack: {:?}; ind: {}; char_arr: {:?};", ch, stack, ind, chars_array);
+                println!(
+                    "Stack isn't empty! (2); char: {}; stack: {:?}; ind: {}; char_arr: {:?};",
+                    ch, stack, ind, chars_array
+                );
                 return Err(NOT_VALID_JSON_FORMAT);
             }
         }
