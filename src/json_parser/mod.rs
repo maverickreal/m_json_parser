@@ -30,18 +30,97 @@ impl JsonParser {
         const NOT_VALID_JSON_FORMAT: &str = "The provided data is not in a valid JSON format!";
         let mut map: HashMap<String, String> = HashMap::new();
         let mut stack: Vec<String> = Vec::new();
+        let mut escape: bool = false;
+        let mut unicode_seq: String = String::new();
+        let mut in_string: bool = false;
+        let mut unicode_rem_cnt: i8 = 0;
 
         for ind in 0..chars_array.len() {
             let ch: char = chars_array[ind];
 
-            if ch == '{' {
-                if !stack.is_empty() {
+            if escape {
+                if unicode_rem_cnt < 0 || unicode_rem_cnt > 4 {
                     // e
-                    println!("{}", "Stack isn't empty!");
+                    println!(
+                        "{}",
+                        "Some error occurred while parsing the JSON data!\nPossible causes:\n\t- Invalid unicode sequence!"
+                    );
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
-                stack.push(String::from("{"));
+                if unicode_rem_cnt > 0 {
+                    unicode_seq.push(ch);
+                    unicode_rem_cnt -= 1;
+
+                    if unicode_rem_cnt == 0 {
+                        if unicode_seq.len() == 4 {
+                            match u32::from_str_radix(&unicode_seq, 16) {
+                                Ok(num) => {
+                                    if let Some(code) = std::char::from_u32(num) {
+                                        stack.last_mut().unwrap().push(code);
+                                        escape = false;
+                                        unicode_seq.clear();
+                                    } else {
+                                        // e
+                                        println!("{}", "Invalid unicode sequence encountered!");
+                                        return Err(NOT_VALID_JSON_FORMAT);
+                                    }
+                                }
+                                Err(err) => {
+                                    // e
+                                    println!(
+                                        "{}: {}",
+                                        "Invalid unicode sequence encountered!", err
+                                    );
+                                    return Err(NOT_VALID_JSON_FORMAT);
+                                }
+                            }
+                        } else {
+                            // e
+                            println!("{}", "Invalid unicode sequence encountered!");
+                            return Err(NOT_VALID_JSON_FORMAT);
+                        }
+                    }
+                    continue;
+                }
+
+                let escaped_char = match ch {
+                    '"' => '"',
+                    '\\' => '\\',
+                    '/' => '/',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    'b' => '\x08',
+                    'f' => '\x0C',
+                    'u' => {
+                        unicode_rem_cnt = 4;
+                        continue;
+                    }
+                    _ => {
+                        // e
+                        println!("{}", "Invalid escape sequence encountered!");
+                        return Err(NOT_VALID_JSON_FORMAT);
+                    }
+                };
+
+                stack.last_mut().unwrap().push(escaped_char);
+                escape = false;
+                continue;
+            }
+
+            if ch == '{' {
+                if in_string {
+                    stack.last_mut().unwrap().push(ch);
+                } else {
+                    if !stack.is_empty() {
+                        // e
+                        println!("{}", "Stack isn't empty!");
+                        return Err(NOT_VALID_JSON_FORMAT);
+                    }
+
+                    stack.push(String::from(ch));
+                }
                 continue;
             }
 
@@ -53,14 +132,9 @@ impl JsonParser {
 
             let last_element: String = stack.last().unwrap().clone();
 
-            let last_ele_ends_text: bool = last_element
-                .chars()
-                .last()
-                .map_or(false,
-                    |c| c.is_alphanumeric() || c.is_whitespace());
-
             if ch == '"' {
-                if last_ele_ends_text {
+                if in_string {
+                    in_string = false;
                     stack.last_mut().unwrap().push(ch);
 
                     if stack.len() == 4 {
@@ -72,6 +146,7 @@ impl JsonParser {
                         return Err(NOT_VALID_JSON_FORMAT);
                     }
                 } else if last_element == "{" || last_element == ":" {
+                    in_string = true;
                     stack.push(String::from(ch));
                 } else {
                     // e
@@ -81,34 +156,27 @@ impl JsonParser {
                 continue;
             }
 
-            if ch.is_alphanumeric() {
-                stack.last_mut().unwrap().push(ch);
-                continue;
-            }
-
-            if ch.is_whitespace() {
-                if last_element == "\"" || last_ele_ends_text {
+            if in_string {
+                if ch == '\\' {
+                    escape = true;
+                } else {
                     stack.last_mut().unwrap().push(ch);
                 }
-                continue;
-            }
-
-            if ch == ':' {
+            } else if ch == ':' {
                 stack.push(String::from(ch));
-                continue;
-            }
-            
-            if ch == ',' {
-                continue;
-            }
+            } else {
+                let valid_end_brace: bool =
+                    ch == '}' && (ind == chars_array.len() - 1) && stack.len() == 1;
+                let ignore_char: bool = ch.is_whitespace() || ch == ','; 
 
-            if ch != '}' || (ind != chars_array.len() - 1) || stack.len() != 1 {
-                // e
-                println!(
-                    "Stack isn't empty! (2); char: {}; stack: {:?}; ind: {}; char_arr: {:?};",
-                    ch, stack, ind, chars_array
-                );
-                return Err(NOT_VALID_JSON_FORMAT);
+                if !ignore_char && !valid_end_brace {
+                    // e
+                    println!(
+                        "Stack isn't empty! (2); char: {}; stack: {:?}; ind: {}; char_arr: {:?};",
+                        ch, stack, ind, chars_array
+                    );
+                    return Err(NOT_VALID_JSON_FORMAT);
+                }
             }
         }
 
