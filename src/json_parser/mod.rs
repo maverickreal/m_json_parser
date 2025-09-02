@@ -1,5 +1,16 @@
 use std::collections::HashMap;
 
+enum ParsePhase {
+    KeyString,
+    ValueString,
+    ValueNumber,
+    ValueBoolean,
+    ValueNull,
+    ValueArray,
+    ValueObject,
+    ObjectSpace,
+}
+
 pub struct JsonParser {
     text: String,
     map: HashMap<String, String>,
@@ -32,8 +43,12 @@ impl JsonParser {
         let mut stack: Vec<String> = Vec::new();
         let mut escape: bool = false;
         let mut unicode_seq: String = String::new();
-        let mut in_string: bool = false;
+        let mut cur_phase: ParsePhase = ParsePhase::ObjectSpace;
         let mut unicode_rem_cnt: i8 = 0;
+
+        let in_string_phase = |_cur_phase: &ParsePhase| -> bool {
+            return matches!(_cur_phase, ParsePhase::KeyString | ParsePhase::ValueString);
+        };
 
         for ind in 0..chars_array.len() {
             let ch: char = chars_array[ind];
@@ -110,7 +125,7 @@ impl JsonParser {
             }
 
             if ch == '{' {
-                if in_string {
+                if in_string_phase(&cur_phase) {
                     stack.last_mut().unwrap().push(ch);
                 } else {
                     if !stack.is_empty() {
@@ -133,8 +148,8 @@ impl JsonParser {
             let last_element: String = stack.last().unwrap().clone();
 
             if ch == '"' {
-                if in_string {
-                    in_string = false;
+                if in_string_phase(&cur_phase) {
+                    cur_phase = ParsePhase::ObjectSpace;
                     stack.last_mut().unwrap().push(ch);
 
                     if stack.len() == 4 {
@@ -145,8 +160,11 @@ impl JsonParser {
                         println!("{}", "Stack length is neither 2 nor 4!");
                         return Err(NOT_VALID_JSON_FORMAT);
                     }
-                } else if last_element == "{" || last_element == ":" {
-                    in_string = true;
+                } else if last_element == "{" {
+                    cur_phase = ParsePhase::KeyString;
+                    stack.push(String::from(ch));
+                } else if last_element == ":" {
+                    cur_phase = ParsePhase::ValueString;
                     stack.push(String::from(ch));
                 } else {
                     // e
@@ -156,18 +174,43 @@ impl JsonParser {
                 continue;
             }
 
-            if in_string {
-                if ch == '\\' {
-                    escape = true;
+            if !matches!(cur_phase, ParsePhase::ObjectSpace) {
+                if in_string_phase(&cur_phase) {
+                    if ch == '\\' {
+                        escape = true;
+                    } else {
+                        stack.last_mut().unwrap().push(ch);
+                    }
                 } else {
-                    stack.last_mut().unwrap().push(ch);
+                    match cur_phase {
+                        ParsePhase::ValueArray => {}
+                        ParsePhase::ValueBoolean => {}
+                        ParsePhase::ValueNull => {}
+                        ParsePhase::ValueNumber => {}
+                        ParsePhase::ValueObject => {},
+                        _ => {
+                            
+                        }
+                    }
                 }
             } else if ch == ':' {
                 stack.push(String::from(ch));
+            } else if ch == '-' || ch.is_ascii_digit() {
+                if matches!(cur_phase, ParsePhase::ValueNumber) && ch == '-' {
+                    // e
+                    println!("{}", "Invalid character encountered! (2)");
+                    return Err(NOT_VALID_JSON_FORMAT);
+                }
+                if !matches!(cur_phase, ParsePhase::ValueNumber) {
+                    cur_phase = ParsePhase::ValueNumber;
+                    stack.push(String::from(ch));
+                } else {
+                    stack.last_mut().unwrap().push(ch);
+                }
             } else {
                 let valid_end_brace: bool =
                     ch == '}' && (ind == chars_array.len() - 1) && stack.len() == 1;
-                let ignore_char: bool = ch.is_whitespace() || ch == ','; 
+                let ignore_char: bool = ch.is_whitespace() || ch == ',';
 
                 if !ignore_char && !valid_end_brace {
                     // e
