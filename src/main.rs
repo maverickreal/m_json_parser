@@ -12,6 +12,7 @@ fn main() {
 
             match parser {
                 Ok(parser) => {
+                    println!("The JSON object entries are:");
                     for (key, val) in parser.get_map().iter() {
                         println!("{}: {}", key, val);
                     }
