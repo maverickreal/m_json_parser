@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 const NOT_VALID_JSON_FORMAT: &str = "The provided data is not in a valid JSON format!";
+
 enum ValueTypes {
     String,
     Number,
@@ -22,13 +23,9 @@ impl JsonParser {
         let ended_at: usize = Self::parse(&chars_array, 0, &mut map)?;
 
         if ended_at != (chars_array.len() - 1) {
-            // e
-            println!(
-                "Some error occurred while parsing the JSON data!\n\
+            return Err("Some error occurred while parsing the JSON data!\n\
                 Possible causes:\n\t- Data present after the end of \
-                the JSON object in the file."
-            );
-            return Err(NOT_VALID_JSON_FORMAT);
+                the JSON object in the file.");
         }
 
         let instance: JsonParser = JsonParser {
@@ -83,8 +80,6 @@ impl JsonParser {
                 }
 
                 if !is_valid_unicode_seq {
-                    // e
-                    println!("{}", "Invalid unicode sequence encountered!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
             }
@@ -104,8 +99,6 @@ impl JsonParser {
                     continue;
                 }
                 _ => {
-                    // e
-                    println!("Invalid escape sequence encountered!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
             };
@@ -203,8 +196,7 @@ impl JsonParser {
                     ind += 1;
                     continue;
                 }
-                // e
-                println!("{}", "Invalid character in number!");
+
                 return Err(NOT_VALID_JSON_FORMAT);
             }
 
@@ -216,8 +208,6 @@ impl JsonParser {
 
             if ch == '.' {
                 if have_decimal_point {
-                    // e
-                    println!("{}", "Multiple decimal points in a number!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -229,8 +219,6 @@ impl JsonParser {
 
             if ch == 'e' || ch == 'E' {
                 if have_exp_char {
-                    // e
-                    println!("{}", "Multiple decimal points in a number!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -276,8 +264,7 @@ impl JsonParser {
                     ind += 1;
                     continue;
                 }
-                // e
-                println!("{}", "Stack is empty!");
+
                 return Err(NOT_VALID_JSON_FORMAT);
             }
 
@@ -287,8 +274,6 @@ impl JsonParser {
                 stack.push(val_str);
 
                 if !transfer_entry_to_map(&mut stack, map, ValueTypes::String) {
-                    // e
-                    println!("{}", "Stack length is neither 2 nor 4!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -298,8 +283,6 @@ impl JsonParser {
 
             if ch == ':' {
                 if stack.len() != 2 {
-                    // e
-                    println!("{}", "Stack length is not 2!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -319,10 +302,9 @@ impl JsonParser {
                 };
 
                 if !transfer_entry_to_map(&mut stack, map, val_type) {
-                    // e
-                    println!("{}", "Stack length is neither 2 nor 4!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
+
                 continue;
             }
 
@@ -332,31 +314,27 @@ impl JsonParser {
                 stack.push(val_str);
 
                 if !transfer_entry_to_map(&mut stack, map, ValueTypes::Number) {
-                    // e
-                    println!("{}", "Stack length is neither 2 nor 4!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
+
                 continue;
             }
 
             if ch == '[' {
-                /*let val_str: String = Self::is_array_sequence(&chars_array, ind)?;
-                ind = ind + val_str.len();
-                stack.push(val_str);*/
+                // TODO
                 if !transfer_entry_to_map(&mut stack, map, ValueTypes::Array) {
-                    // e
-                    println!("{}", "Stack length is neither 2 nor 4!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
+
                 continue;
             }
 
             if ch == '{' {
+                // TODO
                 if !transfer_entry_to_map(&mut stack, map, ValueTypes::Object) {
-                    // e
-                    println!("{}", "Stack length is neither 2 nor 4!");
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
+
                 continue;
             }
 
@@ -365,10 +343,6 @@ impl JsonParser {
             }
 
             if !ch.is_whitespace() && ch != ',' {
-                println!(
-                    "Stack isn't empty! (2); char: {}; stack: {:?}; ind: {}; char_arr: {:?};",
-                    ch, stack, ind, chars_array
-                );
                 return Err(NOT_VALID_JSON_FORMAT);
             }
 
@@ -376,10 +350,6 @@ impl JsonParser {
         }
 
         if stack.len() != 1 {
-            println!(
-                "Stack isn't empty! (2); stack: {:?}; ind: {}; char_arr: {:?};",
-                stack, ind, chars_array
-            );
             return Err(NOT_VALID_JSON_FORMAT);
         }
 
