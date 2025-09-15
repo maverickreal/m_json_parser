@@ -2,24 +2,37 @@ use std::collections::HashMap;
 
 const NOT_VALID_JSON_FORMAT: &str = "The provided data is not in a valid JSON format!";
 
-enum ValueTypes {
-    String,
-    Number,
-    Object,
-    Array,
-    Boolean,
+#[derive(Clone, Debug)]
+pub enum JsonValueTypes {
+    String(String),
+    Number(f64),
+    Object(HashMap<String, JsonValueTypes>),
+    Array(Vec<JsonValueTypes>),
+    Boolean(bool),
     Null,
+}
+
+impl JsonValueTypes {
+    pub fn to_string(&self) -> Option<String> {
+        match self {
+            JsonValueTypes::Number(val) => Some(val.to_string()),
+            JsonValueTypes::Boolean(val) => Some(val.to_string()),
+            JsonValueTypes::Null => Some(String::from("null")),
+            JsonValueTypes::String(val) => Some(val.clone()),
+            _ => None
+        }
+    }
 }
 
 pub struct JsonParser {
     text: String,
-    map: HashMap<String, String>,
+    map: HashMap<String, JsonValueTypes>
 }
 
 impl JsonParser {
     pub fn new(_text: String) -> Result<Self, &'static str> {
         let chars_array: Vec<char> = _text.trim().chars().collect::<Vec<char>>();
-        let mut map: HashMap<String, String> = HashMap::new();
+        let mut map: HashMap<String, JsonValueTypes>  = HashMap::new();
         let ended_at: usize = Self::parse(&chars_array, 0, &mut map)?;
 
         if ended_at != (chars_array.len() - 1) {
@@ -40,7 +53,7 @@ impl JsonParser {
         return &self.text;
     }
 
-    pub fn get_map(&self) -> &HashMap<String, String> {
+    pub fn get_map(&self) -> &HashMap<String, JsonValueTypes> {
         return &self.map;
     }
 
@@ -237,18 +250,15 @@ impl JsonParser {
     fn parse(
         chars_array: &Vec<char>,
         mut ind: usize,
-        map: &mut HashMap<String, String>,
+        map: &mut HashMap<String, JsonValueTypes>,
     ) -> Result<usize, &'static str> {
-        let mut stack: Vec<String> = Vec::new();
+        let mut stack: Vec<JsonValueTypes> = Vec::new();
 
-        let transfer_entry_to_map = |stack: &mut Vec<String>,
-                                     map: &mut HashMap<String, String>,
-                                     value_type: ValueTypes|
-         -> bool {
+        let transfer_entry_to_map = |stack: &mut Vec<JsonValueTypes>, map: &mut HashMap<String, JsonValueTypes>| -> bool {
             if stack.len() == 4 {
-                map.insert(stack[1].clone(), stack[3].clone());
+                map.insert(stack[1].to_string().unwrap(), stack[3].clone());
                 stack.drain(1..);
-            } else if stack.len() != 2 || !matches!(value_type, ValueTypes::String) {
+            } else if stack.len() != 2 || !matches!(stack[1], JsonValueTypes::String(_)) {
                 return false;
             }
 
@@ -260,7 +270,7 @@ impl JsonParser {
 
             if stack.is_empty() {
                 if ch == '{' {
-                    stack.push(String::from(ch));
+                    stack.push(JsonValueTypes::String(ch.to_string()));
                     ind += 1;
                     continue;
                 }
@@ -271,9 +281,9 @@ impl JsonParser {
             if ch == '"' {
                 let mut val_str: String = String::new();
                 let str_end: usize = Self::extract_string(&mut val_str, &chars_array, ind + 1)?;
-                stack.push(val_str);
+                stack.push(JsonValueTypes::String(val_str));
 
-                if !transfer_entry_to_map(&mut stack, map, ValueTypes::String) {
+                if !transfer_entry_to_map(&mut stack, map) {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -286,7 +296,7 @@ impl JsonParser {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
-                stack.push(String::from(ch));
+                stack.push(JsonValueTypes::String(String::from(ch)));
                 ind += 1;
                 continue;
             }
@@ -294,14 +304,15 @@ impl JsonParser {
             if ch == 'n' || ch == 't' || ch == 'f' {
                 let val_str: String = Self::extract_null_or_bool(&chars_array, ind)?;
                 ind = ind + val_str.len();
-                stack.push(val_str);
 
-                let val_type: ValueTypes = match ch {
-                    'n' => ValueTypes::Null,
-                    _ => ValueTypes::Boolean,
+                let val= match ch {
+                    'n' => JsonValueTypes::Null,
+                    _ => JsonValueTypes::Boolean(ch=='t'),
                 };
 
-                if !transfer_entry_to_map(&mut stack, map, val_type) {
+                stack.push(val);
+
+                if !transfer_entry_to_map(&mut stack, map) {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -311,9 +322,10 @@ impl JsonParser {
             if ch.is_ascii_digit() || ch == '-' || ch == '+' {
                 let val_str: String = Self::extract_number(&chars_array, ind)?;
                 ind = ind + val_str.len();
-                stack.push(val_str);
+                let val_num: f64 = val_str.parse::<f64>().unwrap();
+                stack.push(JsonValueTypes::Number(val_num));
 
-                if !transfer_entry_to_map(&mut stack, map, ValueTypes::Number) {
+                if !transfer_entry_to_map(&mut stack, map) {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -322,7 +334,7 @@ impl JsonParser {
 
             if ch == '[' {
                 // TODO
-                if !transfer_entry_to_map(&mut stack, map, ValueTypes::Array) {
+                if !transfer_entry_to_map(&mut stack, map) {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
@@ -330,8 +342,12 @@ impl JsonParser {
             }
 
             if ch == '{' {
-                // TODO
-                if !transfer_entry_to_map(&mut stack, map, ValueTypes::Object) {
+                let mut nested_map: HashMap<String, JsonValueTypes> = HashMap::new();
+                let end_ind: usize = Self::parse(chars_array, ind, &mut nested_map)?;
+                stack.push(JsonValueTypes::Object(nested_map));
+                ind = end_ind + 1;
+
+                if !transfer_entry_to_map(&mut stack, map) {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
