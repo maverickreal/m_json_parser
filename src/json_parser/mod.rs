@@ -416,20 +416,14 @@ impl JsonParser {
                     IterationScope::Object,
                     Some(map),
                 )?;
-                continue;
-            }
-
-            if ch == ':' {
+            } else if ch == ':' {
                 if stack.len() != 2 {
                     return Err(NOT_VALID_JSON_FORMAT);
                 }
 
                 stack.push(JsonValueTypes::String(String::from(ch)));
                 ind += 1;
-                continue;
-            }
-
-            if ch == 'n' || ch == 't' || ch == 'f' {
+            } else if ch == 'n' || ch == 't' || ch == 'f' {
                 Self::handle_null_bool_encounter(
                     chars_array,
                     &mut ind,
@@ -438,10 +432,7 @@ impl JsonParser {
                     IterationScope::Object,
                     Some(map),
                 )?;
-                continue;
-            }
-
-            if ch.is_ascii_digit() || ch == '-' || ch == '+' {
+            } else if ch.is_ascii_digit() || ch == '-' || ch == '+' {
                 Self::handle_number_encounter(
                     chars_array,
                     &mut ind,
@@ -449,10 +440,7 @@ impl JsonParser {
                     IterationScope::Object,
                     Some(map),
                 )?;
-                continue;
-            }
-
-            if ch == '[' {
+            } else if ch == '[' {
                 Self::handle_array_encounter(
                     chars_array,
                     &mut ind,
@@ -460,10 +448,7 @@ impl JsonParser {
                     IterationScope::Object,
                     Some(map),
                 )?;
-                continue;
-            }
-
-            if ch == '{' {
+            } else if ch == '{' {
                 Self::handle_object_encounter(
                     chars_array,
                     &mut ind,
@@ -471,18 +456,13 @@ impl JsonParser {
                     IterationScope::Object,
                     Some(map),
                 )?;
-                continue;
-            }
-
-            if ch == '}' {
+            } else if ch == '}' {
                 break;
-            }
-
-            if !ch.is_whitespace() && ch != ',' {
+            } else if !ch.is_whitespace() && ch != ',' {
                 return Err(NOT_VALID_JSON_FORMAT);
+            } else {
+                ind += 1;
             }
-
-            ind += 1;
         }
 
         if stack.len() != 1 {
@@ -510,10 +490,7 @@ impl JsonParser {
                     IterationScope::Array,
                     None,
                 )?;
-                continue;
-            }
-
-            if ch == 'n' || ch == 't' || ch == 'f' {
+            } else if ch == 'n' || ch == 't' || ch == 'f' {
                 Self::handle_null_bool_encounter(
                     chars_array,
                     &mut ind,
@@ -523,9 +500,7 @@ impl JsonParser {
                     None,
                 )?;
                 continue;
-            }
-
-            if ch.is_ascii_digit() || ch == '-' || ch == '+' {
+            } else if ch.is_ascii_digit() || ch == '-' || ch == '+' {
                 Self::handle_number_encounter(
                     chars_array,
                     &mut ind,
@@ -533,10 +508,7 @@ impl JsonParser {
                     IterationScope::Array,
                     None,
                 )?;
-                continue;
-            }
-
-            if ch == '[' {
+            } else if ch == '[' {
                 Self::handle_array_encounter(
                     chars_array,
                     &mut ind,
@@ -544,10 +516,7 @@ impl JsonParser {
                     IterationScope::Array,
                     None,
                 )?;
-                continue;
-            }
-
-            if ch == '{' {
+            } else if ch == '{' {
                 Self::handle_object_encounter(
                     chars_array,
                     &mut ind,
@@ -555,18 +524,13 @@ impl JsonParser {
                     IterationScope::Array,
                     None,
                 )?;
-                continue;
-            }
-
-            if ch == ']' {
+            } else if ch == ']' {
                 break;
-            }
-
-            if !ch.is_whitespace() && ch != ',' {
+            } else if !ch.is_whitespace() && ch != ',' {
                 return Err(NOT_VALID_JSON_FORMAT);
+            } else {
+                ind += 1;
             }
-
-            ind += 1;
         }
 
         if arr.len() != 1 {
