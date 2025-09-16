@@ -532,10 +532,6 @@ impl JsonParser {
             }
         }
 
-        if arr.len() != 1 {
-            return Err(NOT_VALID_JSON_FORMAT);
-        }
-
         return Ok(ind);
     }
 }
