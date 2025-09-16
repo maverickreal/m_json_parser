@@ -499,7 +499,6 @@ impl JsonParser {
                     IterationScope::Array,
                     None,
                 )?;
-                continue;
             } else if ch.is_ascii_digit() || ch == '-' || ch == '+' {
                 Self::handle_number_encounter(
                     chars_array,
