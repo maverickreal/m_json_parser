@@ -37,8 +37,8 @@ pub struct JsonParser {
 impl JsonParser {
     pub fn new(_text: String) -> Result<Self, &'static str> {
         let chars_array: Vec<char> = _text.trim().chars().collect::<Vec<char>>();
-        let mut map: HashMap<String, JsonValueTypes> = HashMap::new();
-        let ended_at: usize = Self::parse_object(&chars_array, 0, &mut map)?;
+        let mut object: HashMap<String, JsonValueTypes> = HashMap::new();
+        let ended_at: usize = Self::parse_object(&chars_array, 0, &mut object)?;
 
         if ended_at != (chars_array.len() - 1) {
             return Err("Some error occurred while parsing the JSON data!\n\
@@ -48,7 +48,7 @@ impl JsonParser {
 
         let instance: JsonParser = JsonParser {
             text: _text,
-            map: map,
+            map: object,
         };
 
         return Ok(instance);
@@ -83,7 +83,7 @@ impl JsonParser {
 
                 let mut is_valid_unicode_seq: bool = true;
 
-                match u32::from_str_radix(&parsed_unicode_str, 16) {
+                match u32::from_str_radix(parsed_unicode_str, 16) {
                     Ok(num) => {
                         if let Some(code) = std::char::from_u32(num) {
                             *parsed_unicode_str = code.to_string();
@@ -260,7 +260,7 @@ impl JsonParser {
         scope: IterationScope,
         map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
     ) -> Result<(), &'static str> {
-        let val_str: String = Self::extract_null_or_bool(&chars_array, *ind)?;
+        let val_str: String = Self::extract_null_or_bool(chars_array, *ind)?;
         *ind += val_str.len();
 
         let val = match ch {
@@ -291,7 +291,7 @@ impl JsonParser {
         scope: IterationScope,
         map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
     ) -> Result<(), &'static str> {
-        let val_str: String = Self::extract_number(&chars_array, *ind)?;
+        let val_str: String = Self::extract_number(chars_array, *ind)?;
         *ind += val_str.len();
         let val_num: f64 = val_str.parse::<f64>().unwrap();
         container.push(JsonValueTypes::Number(val_num));
@@ -410,7 +410,7 @@ impl JsonParser {
 
             if ch == '"' {
                 Self::handle_string_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     &mut stack,
                     IterationScope::Object,
@@ -431,7 +431,7 @@ impl JsonParser {
 
             if ch == 'n' || ch == 't' || ch == 'f' {
                 Self::handle_null_bool_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     &mut stack,
                     ch,
@@ -443,7 +443,7 @@ impl JsonParser {
 
             if ch.is_ascii_digit() || ch == '-' || ch == '+' {
                 Self::handle_number_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     &mut stack,
                     IterationScope::Object,
@@ -454,7 +454,7 @@ impl JsonParser {
 
             if ch == '[' {
                 Self::handle_array_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     &mut stack,
                     IterationScope::Object,
@@ -465,7 +465,7 @@ impl JsonParser {
 
             if ch == '{' {
                 Self::handle_object_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     &mut stack,
                     IterationScope::Object,
@@ -504,7 +504,7 @@ impl JsonParser {
 
             if ch == '"' {
                 Self::handle_string_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     arr,
                     IterationScope::Array,
@@ -515,7 +515,7 @@ impl JsonParser {
 
             if ch == 'n' || ch == 't' || ch == 'f' {
                 Self::handle_null_bool_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     arr,
                     ch,
@@ -527,7 +527,7 @@ impl JsonParser {
 
             if ch.is_ascii_digit() || ch == '-' || ch == '+' {
                 Self::handle_number_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     arr,
                     IterationScope::Array,
@@ -538,7 +538,7 @@ impl JsonParser {
 
             if ch == '[' {
                 Self::handle_array_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     arr,
                     IterationScope::Array,
@@ -549,7 +549,7 @@ impl JsonParser {
 
             if ch == '{' {
                 Self::handle_object_encounter(
-                    &chars_array,
+                    chars_array,
                     &mut ind,
                     arr,
                     IterationScope::Array,
