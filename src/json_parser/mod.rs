@@ -12,6 +12,11 @@ pub enum JsonValueTypes {
     Null,
 }
 
+enum IterationScope {
+    Object,
+    Array,
+}
+
 impl JsonValueTypes {
     pub fn to_string(&self) -> Option<String> {
         match self {
@@ -19,21 +24,21 @@ impl JsonValueTypes {
             JsonValueTypes::Boolean(val) => Some(val.to_string()),
             JsonValueTypes::Null => Some(String::from("null")),
             JsonValueTypes::String(val) => Some(val.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
 
 pub struct JsonParser {
     text: String,
-    map: HashMap<String, JsonValueTypes>
+    map: HashMap<String, JsonValueTypes>,
 }
 
 impl JsonParser {
     pub fn new(_text: String) -> Result<Self, &'static str> {
         let chars_array: Vec<char> = _text.trim().chars().collect::<Vec<char>>();
-        let mut map: HashMap<String, JsonValueTypes>  = HashMap::new();
-        let ended_at: usize = Self::parse(&chars_array, 0, &mut map)?;
+        let mut map: HashMap<String, JsonValueTypes> = HashMap::new();
+        let ended_at: usize = Self::parse_object(&chars_array, 0, &mut map)?;
 
         if ended_at != (chars_array.len() - 1) {
             return Err("Some error occurred while parsing the JSON data!\n\
@@ -247,23 +252,148 @@ impl JsonParser {
         return Ok(val_str);
     }
 
-    fn parse(
+    fn handle_null_bool_encounter(
+        chars_array: &Vec<char>,
+        ind: &mut usize,
+        container: &mut Vec<JsonValueTypes>,
+        ch: char,
+        scope: IterationScope,
+        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
+    ) -> Result<(), &'static str> {
+        let val_str: String = Self::extract_null_or_bool(&chars_array, *ind)?;
+        *ind += val_str.len();
+
+        let val = match ch {
+            'n' => JsonValueTypes::Null,
+            _ => JsonValueTypes::Boolean(ch == 't'),
+        };
+
+        container.push(val);
+
+        if matches!(scope, IterationScope::Object) {
+            if container.len() == 4 {
+                map_opt
+                    .unwrap()
+                    .insert(container[1].to_string().unwrap(), container[3].clone());
+                container.drain(1..);
+            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
+                return Err(NOT_VALID_JSON_FORMAT);
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn handle_number_encounter(
+        chars_array: &Vec<char>,
+        ind: &mut usize,
+        container: &mut Vec<JsonValueTypes>,
+        scope: IterationScope,
+        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
+    ) -> Result<(), &'static str> {
+        let val_str: String = Self::extract_number(&chars_array, *ind)?;
+        *ind += val_str.len();
+        let val_num: f64 = val_str.parse::<f64>().unwrap();
+        container.push(JsonValueTypes::Number(val_num));
+
+        if matches!(scope, IterationScope::Object) {
+            if container.len() == 4 {
+                map_opt
+                    .unwrap()
+                    .insert(container[1].to_string().unwrap(), container[3].clone());
+                container.drain(1..);
+            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
+                return Err(NOT_VALID_JSON_FORMAT);
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn handle_string_encounter(
+        chars_arr: &Vec<char>,
+        ind: &mut usize,
+        container: &mut Vec<JsonValueTypes>,
+        scope: IterationScope,
+        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
+    ) -> Result<(), &'static str> {
+        let mut val_str: String = String::new();
+        let str_end: usize = Self::extract_string(&mut val_str, chars_arr, *ind + 1)?;
+        container.push(JsonValueTypes::String(val_str));
+        *ind = str_end + 1;
+
+        if matches!(scope, IterationScope::Object) {
+            if container.len() == 4 {
+                map_opt
+                    .unwrap()
+                    .insert(container[1].to_string().unwrap(), container[3].clone());
+                container.drain(1..);
+            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
+                return Err(NOT_VALID_JSON_FORMAT);
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn handle_array_encounter(
+        chars_arr: &Vec<char>,
+        ind: &mut usize,
+        container: &mut Vec<JsonValueTypes>,
+        scope: IterationScope,
+        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
+    ) -> Result<(), &'static str> {
+        let mut arr_inner: Vec<JsonValueTypes> = Vec::new();
+        let end_ind: usize = Self::parse_array(chars_arr, *ind, &mut arr_inner)?;
+        container.push(JsonValueTypes::Array(arr_inner));
+        *ind = end_ind + 1;
+
+        if matches!(scope, IterationScope::Object) {
+            if container.len() == 4 {
+                map_opt
+                    .unwrap()
+                    .insert(container[1].to_string().unwrap(), container[3].clone());
+                container.drain(1..);
+            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
+                return Err(NOT_VALID_JSON_FORMAT);
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn handle_object_encounter(
+        chars_arr: &Vec<char>,
+        ind: &mut usize,
+        container: &mut Vec<JsonValueTypes>,
+        scope: IterationScope,
+        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
+    ) -> Result<(), &'static str> {
+        let mut nested_map: HashMap<String, JsonValueTypes> = HashMap::new();
+        let end_ind: usize = Self::parse_object(chars_arr, *ind, &mut nested_map)?;
+        container.push(JsonValueTypes::Object(nested_map));
+        *ind = end_ind + 1;
+
+        if matches!(scope, IterationScope::Object) {
+            if container.len() == 4 {
+                map_opt
+                    .unwrap()
+                    .insert(container[1].to_string().unwrap(), container[3].clone());
+                container.drain(1..);
+            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
+                return Err(NOT_VALID_JSON_FORMAT);
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn parse_object(
         chars_array: &Vec<char>,
         mut ind: usize,
         map: &mut HashMap<String, JsonValueTypes>,
     ) -> Result<usize, &'static str> {
         let mut stack: Vec<JsonValueTypes> = Vec::new();
-
-        let transfer_entry_to_map = |stack: &mut Vec<JsonValueTypes>, map: &mut HashMap<String, JsonValueTypes>| -> bool {
-            if stack.len() == 4 {
-                map.insert(stack[1].to_string().unwrap(), stack[3].clone());
-                stack.drain(1..);
-            } else if stack.len() != 2 || !matches!(stack[1], JsonValueTypes::String(_)) {
-                return false;
-            }
-
-            return true;
-        };
 
         while ind < chars_array.len() {
             let ch: char = chars_array[ind];
@@ -279,15 +409,13 @@ impl JsonParser {
             }
 
             if ch == '"' {
-                let mut val_str: String = String::new();
-                let str_end: usize = Self::extract_string(&mut val_str, &chars_array, ind + 1)?;
-                stack.push(JsonValueTypes::String(val_str));
-
-                if !transfer_entry_to_map(&mut stack, map) {
-                    return Err(NOT_VALID_JSON_FORMAT);
-                }
-
-                ind = str_end + 1;
+                Self::handle_string_encounter(
+                    &chars_array,
+                    &mut ind,
+                    &mut stack,
+                    IterationScope::Object,
+                    Some(map),
+                )?;
                 continue;
             }
 
@@ -302,55 +430,47 @@ impl JsonParser {
             }
 
             if ch == 'n' || ch == 't' || ch == 'f' {
-                let val_str: String = Self::extract_null_or_bool(&chars_array, ind)?;
-                ind = ind + val_str.len();
-
-                let val= match ch {
-                    'n' => JsonValueTypes::Null,
-                    _ => JsonValueTypes::Boolean(ch=='t'),
-                };
-
-                stack.push(val);
-
-                if !transfer_entry_to_map(&mut stack, map) {
-                    return Err(NOT_VALID_JSON_FORMAT);
-                }
-
+                Self::handle_null_bool_encounter(
+                    &chars_array,
+                    &mut ind,
+                    &mut stack,
+                    ch,
+                    IterationScope::Object,
+                    Some(map),
+                )?;
                 continue;
             }
 
             if ch.is_ascii_digit() || ch == '-' || ch == '+' {
-                let val_str: String = Self::extract_number(&chars_array, ind)?;
-                ind = ind + val_str.len();
-                let val_num: f64 = val_str.parse::<f64>().unwrap();
-                stack.push(JsonValueTypes::Number(val_num));
-
-                if !transfer_entry_to_map(&mut stack, map) {
-                    return Err(NOT_VALID_JSON_FORMAT);
-                }
-
+                Self::handle_number_encounter(
+                    &chars_array,
+                    &mut ind,
+                    &mut stack,
+                    IterationScope::Object,
+                    Some(map),
+                )?;
                 continue;
             }
 
             if ch == '[' {
-                // TODO
-                if !transfer_entry_to_map(&mut stack, map) {
-                    return Err(NOT_VALID_JSON_FORMAT);
-                }
-
+                Self::handle_array_encounter(
+                    &chars_array,
+                    &mut ind,
+                    &mut stack,
+                    IterationScope::Object,
+                    Some(map),
+                )?;
                 continue;
             }
 
             if ch == '{' {
-                let mut nested_map: HashMap<String, JsonValueTypes> = HashMap::new();
-                let end_ind: usize = Self::parse(chars_array, ind, &mut nested_map)?;
-                stack.push(JsonValueTypes::Object(nested_map));
-                ind = end_ind + 1;
-
-                if !transfer_entry_to_map(&mut stack, map) {
-                    return Err(NOT_VALID_JSON_FORMAT);
-                }
-
+                Self::handle_object_encounter(
+                    &chars_array,
+                    &mut ind,
+                    &mut stack,
+                    IterationScope::Object,
+                    Some(map),
+                )?;
                 continue;
             }
 
@@ -366,6 +486,90 @@ impl JsonParser {
         }
 
         if stack.len() != 1 {
+            return Err(NOT_VALID_JSON_FORMAT);
+        }
+
+        return Ok(ind);
+    }
+
+    fn parse_array(
+        chars_array: &Vec<char>,
+        mut ind: usize,
+        arr: &mut Vec<JsonValueTypes>,
+    ) -> Result<usize, &'static str> {
+        ind += 1;
+
+        while ind < chars_array.len() {
+            let ch: char = chars_array[ind];
+
+            if ch == '"' {
+                Self::handle_string_encounter(
+                    &chars_array,
+                    &mut ind,
+                    arr,
+                    IterationScope::Array,
+                    None,
+                )?;
+                continue;
+            }
+
+            if ch == 'n' || ch == 't' || ch == 'f' {
+                Self::handle_null_bool_encounter(
+                    &chars_array,
+                    &mut ind,
+                    arr,
+                    ch,
+                    IterationScope::Array,
+                    None,
+                )?;
+                continue;
+            }
+
+            if ch.is_ascii_digit() || ch == '-' || ch == '+' {
+                Self::handle_number_encounter(
+                    &chars_array,
+                    &mut ind,
+                    arr,
+                    IterationScope::Array,
+                    None,
+                )?;
+                continue;
+            }
+
+            if ch == '[' {
+                Self::handle_array_encounter(
+                    &chars_array,
+                    &mut ind,
+                    arr,
+                    IterationScope::Array,
+                    None,
+                )?;
+                continue;
+            }
+
+            if ch == '{' {
+                Self::handle_object_encounter(
+                    &chars_array,
+                    &mut ind,
+                    arr,
+                    IterationScope::Array,
+                    None,
+                )?;
+                continue;
+            }
+
+            if ch == ']' {
+                break;
+            }
+
+            if !ch.is_whitespace() && ch != ',' {
+                return Err(NOT_VALID_JSON_FORMAT);
+            }
+
+            ind += 1;
+        }
+
+        if arr.len() != 1 {
             return Err(NOT_VALID_JSON_FORMAT);
         }
 
