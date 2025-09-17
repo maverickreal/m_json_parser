@@ -51,24 +51,15 @@ fn print_parser_map(map: &HashMap<String, JsonValueTypes>, level: usize) -> () {
 }
 
 fn main() {
-    let mut input_holder: String = String::new();
+    let test_str: String = String::from(r#"{}"#);
+    let parser: Result<JsonParser, &'static str> = JsonParser::new(test_str);
 
-    match stdin().read_to_string(&mut input_holder) {
-        Ok(_) => {
-            let parser: Result<JsonParser, &'static str> = JsonParser::new(input_holder);
-
-            match parser {
-                Ok(parser) => {
-                    print_parser_map(parser.get_map(), 0);
-                }
-                Err(err_str) => {
-                    println!("{}", err_str);
-                }
-            }
+    match parser {
+        Ok(parser) => {
+            print_parser_map(parser.get_map(), 0);
         }
-        Err(err) => {
-            eprintln!("{}", err.to_string());
-            println!("Invalid input provided!");
+        Err(err_str) => {
+            println!("{}", err_str);
         }
     }
 }
