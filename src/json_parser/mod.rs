@@ -12,11 +12,6 @@ pub enum JsonValueTypes {
     Null,
 }
 
-enum IterationScope {
-    Object,
-    Array,
-}
-
 impl JsonValueTypes {
     pub fn to_string(&self) -> Option<String> {
         match self {
@@ -29,6 +24,17 @@ impl JsonValueTypes {
     }
 }
 
+enum ContainerState {
+    Object {
+        map: HashMap<String, JsonValueTypes>,
+        current_key: Option<String>,
+        expecting_colon: bool,
+    },
+    Array {
+        list: Vec<JsonValueTypes>,
+    },
+}
+
 pub struct JsonParser {
     text: String,
     map: HashMap<String, JsonValueTypes>,
@@ -37,25 +43,15 @@ pub struct JsonParser {
 impl JsonParser {
     pub fn new(_text: String) -> Result<Self, &'static str> {
         let chars_array: Vec<char> = _text.trim().chars().collect::<Vec<char>>();
-        let mut object: HashMap<String, JsonValueTypes> = HashMap::new();
-        let ended_at: usize = Self::parse_object(&chars_array, 0, &mut object)?;
 
-        if ended_at != (chars_array.len() - 1) {
-            return Err("Some error occurred while parsing the JSON data!\n\
-                Possible causes:\n\t- Data present after the end of \
-                the JSON object in the file.");
+        let root_val = Self::parse(&chars_array)?;
+
+        if let JsonValueTypes::Object(map) = root_val {
+            let instance = JsonParser { text: _text, map };
+            return Ok(instance);
+        } else {
+            return Err("Root of the JSON must be an object.");
         }
-
-        let instance: JsonParser = JsonParser {
-            text: _text,
-            map: object,
-        };
-
-        return Ok(instance);
-    }
-
-    pub fn get_text(&self) -> &String {
-        return &self.text;
     }
 
     pub fn get_map(&self) -> &HashMap<String, JsonValueTypes> {
@@ -252,286 +248,195 @@ impl JsonParser {
         return Ok(val_str);
     }
 
-    fn handle_null_bool_encounter(
-        chars_array: &Vec<char>,
-        ind: &mut usize,
-        container: &mut Vec<JsonValueTypes>,
-        ch: char,
-        scope: IterationScope,
-        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
-    ) -> Result<(), &'static str> {
-        let val_str: String = Self::extract_null_or_bool(chars_array, *ind)?;
-        *ind += val_str.len();
-
-        let val = match ch {
-            'n' => JsonValueTypes::Null,
-            _ => JsonValueTypes::Boolean(ch == 't'),
-        };
-
-        container.push(val);
-
-        if matches!(scope, IterationScope::Object) {
-            if container.len() == 4 {
-                map_opt
-                    .unwrap()
-                    .insert(container[1].to_string().unwrap(), container[3].clone());
-                container.drain(1..);
-            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
-                return Err(NOT_VALID_JSON_FORMAT);
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn handle_number_encounter(
-        chars_array: &Vec<char>,
-        ind: &mut usize,
-        container: &mut Vec<JsonValueTypes>,
-        scope: IterationScope,
-        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
-    ) -> Result<(), &'static str> {
-        let val_str: String = Self::extract_number(chars_array, *ind)?;
-        *ind += val_str.len();
-        let val_num: f64 = val_str.parse::<f64>().unwrap();
-        container.push(JsonValueTypes::Number(val_num));
-
-        if matches!(scope, IterationScope::Object) {
-            if container.len() == 4 {
-                map_opt
-                    .unwrap()
-                    .insert(container[1].to_string().unwrap(), container[3].clone());
-                container.drain(1..);
-            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
-                return Err(NOT_VALID_JSON_FORMAT);
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn handle_string_encounter(
-        chars_arr: &Vec<char>,
-        ind: &mut usize,
-        container: &mut Vec<JsonValueTypes>,
-        scope: IterationScope,
-        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
-    ) -> Result<(), &'static str> {
-        let mut val_str: String = String::new();
-        let str_end: usize = Self::extract_string(&mut val_str, chars_arr, *ind + 1)?;
-        container.push(JsonValueTypes::String(val_str));
-        *ind = str_end + 1;
-
-        if matches!(scope, IterationScope::Object) {
-            if container.len() == 4 {
-                map_opt
-                    .unwrap()
-                    .insert(container[1].to_string().unwrap(), container[3].clone());
-                container.drain(1..);
-            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
-                return Err(NOT_VALID_JSON_FORMAT);
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn handle_array_encounter(
-        chars_arr: &Vec<char>,
-        ind: &mut usize,
-        container: &mut Vec<JsonValueTypes>,
-        scope: IterationScope,
-        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
-    ) -> Result<(), &'static str> {
-        let mut arr_inner: Vec<JsonValueTypes> = Vec::new();
-        let end_ind: usize = Self::parse_array(chars_arr, *ind, &mut arr_inner)?;
-        container.push(JsonValueTypes::Array(arr_inner));
-        *ind = end_ind + 1;
-
-        if matches!(scope, IterationScope::Object) {
-            if container.len() == 4 {
-                map_opt
-                    .unwrap()
-                    .insert(container[1].to_string().unwrap(), container[3].clone());
-                container.drain(1..);
-            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
-                return Err(NOT_VALID_JSON_FORMAT);
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn handle_object_encounter(
-        chars_arr: &Vec<char>,
-        ind: &mut usize,
-        container: &mut Vec<JsonValueTypes>,
-        scope: IterationScope,
-        map_opt: Option<&mut HashMap<String, JsonValueTypes>>,
-    ) -> Result<(), &'static str> {
-        let mut nested_map: HashMap<String, JsonValueTypes> = HashMap::new();
-        let end_ind: usize = Self::parse_object(chars_arr, *ind, &mut nested_map)?;
-        container.push(JsonValueTypes::Object(nested_map));
-        *ind = end_ind + 1;
-
-        if matches!(scope, IterationScope::Object) {
-            if container.len() == 4 {
-                map_opt
-                    .unwrap()
-                    .insert(container[1].to_string().unwrap(), container[3].clone());
-                container.drain(1..);
-            } else if container.len() != 2 || !matches!(container[1], JsonValueTypes::String(_)) {
-                return Err(NOT_VALID_JSON_FORMAT);
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn parse_object(
-        chars_array: &Vec<char>,
-        mut ind: usize,
-        map: &mut HashMap<String, JsonValueTypes>,
-    ) -> Result<usize, &'static str> {
-        let mut stack: Vec<JsonValueTypes> = Vec::new();
-
-        while ind < chars_array.len() {
-            let ch: char = chars_array[ind];
-
-            if stack.is_empty() {
-                if ch == '{' {
-                    stack.push(JsonValueTypes::String(ch.to_string()));
-                    ind += 1;
-                    continue;
+    fn add_value_to_stack(
+        stack: &mut Vec<ContainerState>,
+        val: JsonValueTypes,
+    ) -> Result<Option<JsonValueTypes>, &'static str> {
+        if let Some(top) = stack.last_mut() {
+            match top {
+                ContainerState::Object {
+                    map,
+                    current_key,
+                    expecting_colon,
+                } => {
+                    if let Some(key) = current_key.take() {
+                        if !*expecting_colon {
+                            return Err(NOT_VALID_JSON_FORMAT);
+                        }
+                        map.insert(key, val);
+                        *expecting_colon = false;
+                    } else {
+                        if let JsonValueTypes::String(s) = val {
+                            *current_key = Some(s);
+                        } else {
+                            return Err(NOT_VALID_JSON_FORMAT);
+                        }
+                    }
                 }
-
-                return Err(NOT_VALID_JSON_FORMAT);
-            }
-
-            if ch == '"' {
-                Self::handle_string_encounter(
-                    chars_array,
-                    &mut ind,
-                    &mut stack,
-                    IterationScope::Object,
-                    Some(map),
-                )?;
-            } else if ch == ':' {
-                if stack.len() != 2 {
-                    return Err(NOT_VALID_JSON_FORMAT);
+                ContainerState::Array { list } => {
+                    list.push(val);
                 }
-
-                stack.push(JsonValueTypes::String(String::from(ch)));
-                ind += 1;
-            } else if ch == 'n' || ch == 't' || ch == 'f' {
-                Self::handle_null_bool_encounter(
-                    chars_array,
-                    &mut ind,
-                    &mut stack,
-                    ch,
-                    IterationScope::Object,
-                    Some(map),
-                )?;
-            } else if ch.is_ascii_digit() || ch == '-' || ch == '+' {
-                Self::handle_number_encounter(
-                    chars_array,
-                    &mut ind,
-                    &mut stack,
-                    IterationScope::Object,
-                    Some(map),
-                )?;
-            } else if ch == '[' {
-                Self::handle_array_encounter(
-                    chars_array,
-                    &mut ind,
-                    &mut stack,
-                    IterationScope::Object,
-                    Some(map),
-                )?;
-            } else if ch == '{' {
-                Self::handle_object_encounter(
-                    chars_array,
-                    &mut ind,
-                    &mut stack,
-                    IterationScope::Object,
-                    Some(map),
-                )?;
-            } else if ch == '}' {
-                break;
-            } else if !ch.is_whitespace() && ch != ',' {
-                return Err(NOT_VALID_JSON_FORMAT);
-            } else {
-                ind += 1;
             }
+            Ok(None)
+        } else {
+            Ok(Some(val))
         }
+    }
 
-        if stack.len() != 1 {
+    fn parse(chars_array: &Vec<char>) -> Result<JsonValueTypes, &'static str> {
+        let mut stack: Vec<ContainerState> = Vec::new();
+        let mut ind = 0;
+        let mut root_value: Option<JsonValueTypes> = None;
+
+        if chars_array.is_empty() {
             return Err(NOT_VALID_JSON_FORMAT);
         }
 
-        return Ok(ind);
-    }
-
-    fn parse_array(
-        chars_array: &Vec<char>,
-        mut ind: usize,
-        arr: &mut Vec<JsonValueTypes>,
-    ) -> Result<usize, &'static str> {
-        ind += 1;
-
         while ind < chars_array.len() {
-            let ch: char = chars_array[ind];
+            let ch = chars_array[ind];
+
+            if ch.is_whitespace() || ch == ',' {
+                ind += 1;
+                continue;
+            }
+
+            if ch == ':' {
+                if let Some(ContainerState::Object {
+                    expecting_colon,
+                    current_key,
+                    ..
+                }) = stack.last_mut()
+                {
+                    if current_key.is_none() || *expecting_colon {
+                        return Err(NOT_VALID_JSON_FORMAT);
+                    }
+                    *expecting_colon = true;
+                } else {
+                    return Err(NOT_VALID_JSON_FORMAT);
+                }
+                ind += 1;
+
+                continue;
+            }
+
+            if ch == '{' {
+                stack.push(ContainerState::Object {
+                    map: HashMap::new(),
+                    current_key: None,
+                    expecting_colon: false,
+                });
+                ind += 1;
+
+                continue;
+            }
+
+            if ch == '[' {
+                stack.push(ContainerState::Array { list: Vec::new() });
+                ind += 1;
+
+                continue;
+            }
+
+            if ch == '}' {
+                if let Some(ContainerState::Object {
+                    map, current_key, ..
+                }) = stack.pop()
+                {
+                    if current_key.is_some() {
+                        return Err(NOT_VALID_JSON_FORMAT);
+                    }
+                    let val = JsonValueTypes::Object(map);
+                    if let Some(root) = Self::add_value_to_stack(&mut stack, val)? {
+                        root_value = Some(root);
+                        ind += 1;
+
+                        break;
+                    }
+                } else {
+                    return Err(NOT_VALID_JSON_FORMAT);
+                }
+                ind += 1;
+
+                continue;
+            }
+
+            if ch == ']' {
+                if let Some(ContainerState::Array { list }) = stack.pop() {
+                    let val = JsonValueTypes::Array(list);
+
+                    if let Some(root) = Self::add_value_to_stack(&mut stack, val)? {
+                        root_value = Some(root);
+                        ind += 1;
+
+                        break;
+                    }
+                } else {
+                    return Err(NOT_VALID_JSON_FORMAT);
+                }
+                ind += 1;
+
+                continue;
+            }
 
             if ch == '"' {
-                Self::handle_string_encounter(
-                    chars_array,
-                    &mut ind,
-                    arr,
-                    IterationScope::Array,
-                    None,
-                )?;
-            } else if ch == 'n' || ch == 't' || ch == 'f' {
-                Self::handle_null_bool_encounter(
-                    chars_array,
-                    &mut ind,
-                    arr,
-                    ch,
-                    IterationScope::Array,
-                    None,
-                )?;
-            } else if ch.is_ascii_digit() || ch == '-' || ch == '+' {
-                Self::handle_number_encounter(
-                    chars_array,
-                    &mut ind,
-                    arr,
-                    IterationScope::Array,
-                    None,
-                )?;
-            } else if ch == '[' {
-                Self::handle_array_encounter(
-                    chars_array,
-                    &mut ind,
-                    arr,
-                    IterationScope::Array,
-                    None,
-                )?;
-            } else if ch == '{' {
-                Self::handle_object_encounter(
-                    chars_array,
-                    &mut ind,
-                    arr,
-                    IterationScope::Array,
-                    None,
-                )?;
-            } else if ch == ']' {
-                break;
-            } else if !ch.is_whitespace() && ch != ',' {
-                return Err(NOT_VALID_JSON_FORMAT);
-            } else {
-                ind += 1;
+                let mut val_str = String::new();
+                let end_ind = Self::extract_string(&mut val_str, chars_array, ind + 1)?;
+                ind = end_ind + 1;
+
+                if let Some(root) =
+                    Self::add_value_to_stack(&mut stack, JsonValueTypes::String(val_str))?
+                {
+                    root_value = Some(root);
+                    break;
+                }
+                continue;
             }
+
+            if ch == 'n' || ch == 't' || ch == 'f' {
+                let val_str = Self::extract_null_or_bool(chars_array, ind)?;
+                ind += val_str.len();
+                let val = match ch {
+                    'n' => JsonValueTypes::Null,
+                    _ => JsonValueTypes::Boolean(ch == 't'),
+                };
+
+                if let Some(root) = Self::add_value_to_stack(&mut stack, val)? {
+                    root_value = Some(root);
+                    break;
+                }
+                continue;
+            }
+
+            if ch.is_ascii_digit() || ch == '-' || ch == '+' {
+                let val_str = Self::extract_number(chars_array, ind)?;
+                ind += val_str.len();
+                let val_num: f64 = val_str.parse::<f64>().unwrap();
+
+                if let Some(root) =
+                    Self::add_value_to_stack(&mut stack, JsonValueTypes::Number(val_num))?
+                {
+                    root_value = Some(root);
+                    break;
+                }
+                continue;
+            }
+
+            return Err(NOT_VALID_JSON_FORMAT);
         }
 
-        return Ok(ind);
+        if let Some(root) = root_value {
+            while ind < chars_array.len() {
+                if !chars_array[ind].is_whitespace() {
+                    return Err("Some error occurred while parsing the JSON data!\n\
+                    Possible causes:\n\t- Data present after the end of \
+                    the JSON object in the file.");
+                }
+                ind += 1;
+            }
+
+            return Ok(root);
+        }
+
+        Err(NOT_VALID_JSON_FORMAT)
     }
 }
